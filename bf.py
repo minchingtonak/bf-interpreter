@@ -24,6 +24,9 @@ class BFInterpreter:
     showmem: bool
     window_size: int
     margin: int
+    verbose: bool
+    printchar: bool
+    fromfile: bool
 
     # Interpreter parameters
     window_start: InitVar[int] = None
@@ -39,19 +42,21 @@ class BFInterpreter:
 
     def evaluate(self, code):
         self.pc = 0
-        self.preprocess(code)
+        code = self.preprocess(code)
         while self.pc < len(code):
             try:
                 _CMDS[code[self.pc]](self)
+                self.pc += 1
+                if self.showmem:
+                    self.print_tape()
+                if self.stepbystep and self.fromfile:
+                    input("Enter to continue to next step...")
             except KeyError:
                 pass
-            self.pc += 1
-            if self.showmem:
-                self.print_tape()
-            if self.stepbystep:
-                input("Enter to continue to next step...")
 
     def preprocess(self, code):
+        legalchars = ',.<>+-[]'
+        code = ''.join([i for i in code if i in legalchars])
         self.jumps.clear()
         opens = deque()
         for idx, c in enumerate(code):
@@ -59,6 +64,7 @@ class BFInterpreter:
                 opens.append(idx)
             elif c == "]":
                 self.jumps[opens.pop()] = idx
+        return code
 
     def get_cell(self, idx):
         tmp = idx + self.addr_offset
@@ -104,15 +110,12 @@ class BFInterpreter:
     def add_cells_right(self):
         self.tape.extend([0 for i in range(BFInterpreter.CHUNK_SIZE)])
 
-    # @make_cmd("p")
-    # def pinfo(self):
-    #     print("window_start:", self.window_start)
-    #     print("addr_ptr:", self.addr_ptr)
-    #     print("addr_offset:", self.addr_offset)
-    #     print("num_cells:", len(self.tape))
-
     @make_cmd("<")
     def move_left(self):
+        if self.verbose:
+            print(
+                f"Moving the head left from cell {self.addr_ptr} to {self.addr_ptr-1}."
+            )
         self.addr_ptr -= 1
         if self.addr_ptr - self.window_start < self.margin:
             self.shift_window(left=True)
@@ -121,6 +124,10 @@ class BFInterpreter:
 
     @make_cmd(">")
     def move_right(self):
+        if self.verbose:
+            print(
+                f"Moving the head right from cell {self.addr_ptr} to {self.addr_ptr+1}."
+            )
         self.addr_ptr += 1
         if self.window_start + self.window_size - self.addr_ptr <= self.margin:
             self.shift_window()
@@ -129,19 +136,28 @@ class BFInterpreter:
 
     @make_cmd(".")
     def write(self):
-        print(chr(self.get_current_cell()), end="")
+        f = chr if self.printchar else lambda x: x
+        if self.verbose:
+            print("Writing cell to stdout.")
+        print(f(self.get_current_cell()), end="" if self.fromfile else "\n")
 
     @make_cmd(",")
     def read(self):
+        if self.verbose:
+            print("Waiting for input...")
         self.set_current_cell(int(input()) % 2 ** 8)
 
     @make_cmd("+")
     def inc(self):
+        if self.verbose:
+            print("Incrementing the current cell.")
         self.modify_current_cell(lambda x: x + 1)
         self.modify_current_cell(lambda x: x % 2 ** 8)
 
     @make_cmd("-")
     def dec(self):
+        if self.verbose:
+            print("Decrementing the current cell.")
         self.modify_current_cell(lambda x: x - 1)
         if self.get_current_cell() < 0:
             self.modify_current_cell(lambda x: x + 2 ** 8)
@@ -149,15 +165,24 @@ class BFInterpreter:
     @make_cmd("[")
     def jump_if_zero(self):
         if not self.get_current_cell():
+            if self.verbose:
+                print(f"Jumping to instruction {self.jumps[self.pc]}")
             self.pc = self.jumps[self.pc]
+        elif self.verbose:
+            print("Current cell is not 0. Not jumping.")
 
     @make_cmd("]")
     def jump_unless_zero(self):
         if self.get_current_cell():
-            # Slow, need better DS?
-            self.pc = next(
+            tmp = next(
                 key for key, value in self.jumps.items() if value == self.pc
             )
+            if self.verbose:
+                print(f"Jumping to instruction {tmp}.")
+            # Slow, need better DS?
+            self.pc = tmp
+        elif self.verbose:
+            print("Current cell is 0. Not jumping.")
 
 
 # TODO option for separate memories for each source file inputted
@@ -195,7 +220,18 @@ if __name__ == "__main__":
         action="store_true",
         help="print contents of memory near the head at each execution step",
     )
-    parser.add_argument("--verbose", "-v", help="", action="store_true")
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="print description of each instruction executed",
+    )
+    parser.add_argument(
+        "--print-chars",
+        "-pc",
+        action="store_true",
+        help="print character representation of cells",
+    )
 
     parsed_args = parser.parse_args()
 
@@ -204,6 +240,9 @@ if __name__ == "__main__":
         showmem=parsed_args.show_memory,
         window_size=parsed_args.print_window,
         margin=parsed_args.head_margin,
+        verbose=parsed_args.verbose,
+        printchar=parsed_args.print_chars,
+        fromfile=parsed_args.file,
     )
 
     if parsed_args.file:
@@ -211,7 +250,7 @@ if __name__ == "__main__":
             for filename in parsed_args.file:
                 with open(filename, "r") as file:
                     bf_int.evaluate(file.read())
-        except FileNotFoundError as e:
+        except (FileNotFoundError, EOFError, KeyboardInterrupt) as e:
             print(e)
     else:
         try:
