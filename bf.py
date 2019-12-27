@@ -1,6 +1,6 @@
 #!/usr/bin/python3.7
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, InitVar
 from typing import List
 from collections import deque
 
@@ -16,26 +16,40 @@ def make_cmd(name):
 
 @dataclass
 class BFInterpreter:
+    # Constants
+    CHUNK_SIZE = 32
+
+    # Configuration
     stepbystep: bool
+    showmem: bool
     window_size: int
     margin: int
 
-    chunk_size: int = 32
-    tape: deque = deque([0 for i in range(32)])
+    # Interpreter parameters
+    window_start: InitVar[int] = None
+    tape: InitVar[deque] = None
     addr_ptr: int = 0
     pc: int = 0
-    source: str = str()
+    addr_offset: int = 0
     jumps: dict = field(default_factory=dict)
 
+    def __post_init__(self, window_start, tape):
+        self.window_start = self.addr_ptr - self.margin
+        self.tape = deque([0 for i in range(BFInterpreter.CHUNK_SIZE)])
+
     def evaluate(self, code):
-        self.source = code
-        self.preprocess(self.source)
-        while self.pc < len(self.source):
+        self.pc = 0
+        self.preprocess(code)
+        while self.pc < len(code):
             try:
-                _CMDS[self.source[self.pc]](self)
+                _CMDS[code[self.pc]](self)
             except KeyError:
                 pass
             self.pc += 1
+            if self.showmem:
+                self.print_tape()
+            if self.stepbystep:
+                input("Enter to continue to next step...")
 
     def preprocess(self, code):
         self.jumps.clear()
@@ -46,49 +60,100 @@ class BFInterpreter:
             elif c == "]":
                 self.jumps[opens.pop()] = idx
 
+    def get_cell(self, idx):
+        tmp = idx + self.addr_offset
+        return self.tape[tmp] if tmp >= 0 and tmp < len(self.tape) else 0
+
+    def get_current_cell(self):
+        return self.get_cell(self.addr_ptr)
+
+    def set_current_cell(self, val):
+        self.tape[self.addr_ptr + self.addr_offset] = val
+
+    def modify_current_cell(self, func):
+        self.set_current_cell(func(self.get_current_cell()))
+
     def print_tape(self):
-        pass
+        print("  {:^3}".format(self.window_start), end="")
+        for i in range(
+            self.window_start + 1, self.window_start + self.window_size
+        ):
+            print("   {:^3}".format(i), end="")
+        print()
+        self.print_border()
+        for i in range(
+            self.window_start, self.window_start + self.window_size
+        ):
+            print(
+                "| {0:^3} ".format(self.get_cell(i)), end="",
+            )
+        print("|")
+        self.print_border()
+        print(f"{'      ' * (self.addr_ptr - self.window_start)}   ^")
+
+    def print_border(self):
+        print(f"{'+-----' * self.window_size}+")
+
+    def shift_window(self, left=False):
+        self.window_start += 1 if not left else -1
+
+    def add_cells_left(self):
+        self.tape.extendleft([0 for i in range(BFInterpreter.CHUNK_SIZE)])
+        self.addr_offset += BFInterpreter.CHUNK_SIZE
+
+    def add_cells_right(self):
+        self.tape.extend([0 for i in range(BFInterpreter.CHUNK_SIZE)])
+
+    # @make_cmd("p")
+    # def pinfo(self):
+    #     print("window_start:", self.window_start)
+    #     print("addr_ptr:", self.addr_ptr)
+    #     print("addr_offset:", self.addr_offset)
+    #     print("num_cells:", len(self.tape))
 
     @make_cmd("<")
     def move_left(self):
         self.addr_ptr -= 1
+        if self.addr_ptr - self.window_start < self.margin:
+            self.shift_window(left=True)
         if self.addr_ptr < 0:
-            self.tape.extendleft([0 for i in range(self.chunk_size)])
-            self.addr_ptr = self.chunk_size - 1
+            self.add_cells_left()
 
     @make_cmd(">")
     def move_right(self):
         self.addr_ptr += 1
-        if self.addr_ptr > len(self.tape):
-            self.tape.extend([0 for i in range(self.chunk_size)])
+        if self.window_start + self.window_size - self.addr_ptr <= self.margin:
+            self.shift_window()
+        if self.addr_ptr >= len(self.tape):
+            self.add_cells_right()
 
     @make_cmd(".")
     def write(self):
-        print(chr(self.tape[self.addr_ptr]), end="")
+        print(chr(self.get_current_cell()), end="")
 
     @make_cmd(",")
     def read(self):
-        self.tape[self.addr_ptr] = int(input()) % 2 ** 8
+        self.set_current_cell(int(input()) % 2 ** 8)
 
     @make_cmd("+")
     def inc(self):
-        self.tape[self.addr_ptr] += 1
-        self.tape[self.addr_ptr] %= 2 ** 8
+        self.modify_current_cell(lambda x: x + 1)
+        self.modify_current_cell(lambda x: x % 2 ** 8)
 
     @make_cmd("-")
     def dec(self):
-        self.tape[self.addr_ptr] -= 1
-        if self.tape[self.addr_ptr] < 0:
-            self.tape[self.addr_ptr] += 2 ** 8
+        self.modify_current_cell(lambda x: x - 1)
+        if self.get_current_cell() < 0:
+            self.modify_current_cell(lambda x: x + 2 ** 8)
 
     @make_cmd("[")
     def jump_if_zero(self):
-        if not self.tape[self.addr_ptr]:
+        if not self.get_current_cell():
             self.pc = self.jumps[self.pc]
 
     @make_cmd("]")
     def jump_unless_zero(self):
-        if self.tape[self.addr_ptr]:
+        if self.get_current_cell():
             # Slow, need better DS?
             self.pc = next(
                 key for key, value in self.jumps.items() if value == self.pc
@@ -107,37 +172,47 @@ if __name__ == "__main__":
     parser.add_argument(
         "--step-by-step",
         "-s",
-        action="store_false",
+        action="store_true",
         help="Execute each instruction one by one, waiting for user confirmation to continue to the next",
     )
     parser.add_argument(
-        "--print-range",
-        "-pr",
-        const=3,
+        "--print-window",
+        "-pw",
+        default=10,
         type=int,
-        nargs="?",
         help="size of the window of memory cells that will be printed. default 10",
     )
     parser.add_argument(
         "--head-margin",
         "-hm",
-        const=2,
+        default=2,
         type=int,
-        nargs="?",
         help="minimum number of cells away the head needs to be to shift the print window",
     )
+    parser.add_argument(
+        "--show-memory",
+        "-sm",
+        action="store_true",
+        help="print contents of memory near the head at each execution step",
+    )
+    parser.add_argument("--verbose", "-v", help="", action="store_true")
 
     parsed_args = parser.parse_args()
 
     bf_int = BFInterpreter(
         stepbystep=parsed_args.step_by_step,
-        window_size=parsed_args.print_range,
+        showmem=parsed_args.show_memory,
+        window_size=parsed_args.print_window,
         margin=parsed_args.head_margin,
     )
 
     if parsed_args.file:
-        with open(parsed_args.file, "r") as file:
-            bf_int.evaluate(file.read())
+        try:
+            for filename in parsed_args.file:
+                with open(filename, "r") as file:
+                    bf_int.evaluate(file.read())
+        except FileNotFoundError as e:
+            print(e)
     else:
         try:
             while True:
