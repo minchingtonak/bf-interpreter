@@ -43,7 +43,9 @@ class BFInterpreter:
     def evaluate(self, code):
         self.pc = 0
         code = self.preprocess(code)
+        steps = 0
         while self.pc < len(code):
+            steps += 1
             try:
                 _CMDS[code[self.pc]](self)
                 self.pc += 1
@@ -53,6 +55,7 @@ class BFInterpreter:
                     input("Enter to continue to next step...")
             except KeyError:
                 pass
+        print(f"Completed in {steps} steps.")
 
     def preprocess(self, code):
         legalchars = ',.<>+-[]'
