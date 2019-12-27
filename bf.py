@@ -83,7 +83,7 @@ class BFInterpreter:
         self.set_current_cell(func(self.get_current_cell()))
 
     def print_tape(self):
-        print("  {:^3}".format(self.window_start), end="")
+        print("\n  {:^3}".format(self.window_start), end="")
         for i in range(
             self.window_start + 1, self.window_start + self.window_size
         ):
