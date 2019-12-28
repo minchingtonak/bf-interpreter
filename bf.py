@@ -55,7 +55,7 @@ class BFInterpreter:
                     input("Enter to continue to next step...")
             except KeyError:
                 pass
-        print(f"Completed in {steps} steps.")
+        print(f"\nCompleted in {steps} steps.")
 
     def preprocess(self, code):
         legalchars = ',.<>+-[]'
