@@ -25,7 +25,7 @@ class BFInterpreter:
     window_size: int
     margin: int
     verbose: bool
-    printchar: bool
+    printraw: bool
     fromfile: bool
 
     # Interpreter parameters
@@ -139,7 +139,7 @@ class BFInterpreter:
 
     @make_cmd(".")
     def write(self):
-        f = chr if self.printchar else lambda x: x
+        f = chr if not self.printraw else lambda x: x
         if self.verbose:
             print("Writing cell to stdout.")
         print(f(self.get_current_cell()), end="" if self.fromfile else "\n")
@@ -230,8 +230,8 @@ if __name__ == "__main__":
         help="print description of each instruction executed",
     )
     parser.add_argument(
-        "--print-chars",
-        "-pc",
+        "--print-raw",
+        "-r",
         action="store_true",
         help="print character representation of cells",
     )
@@ -244,7 +244,7 @@ if __name__ == "__main__":
         window_size=parsed_args.print_window,
         margin=parsed_args.head_margin,
         verbose=parsed_args.verbose,
-        printchar=parsed_args.print_chars,
+        printraw=parsed_args.print_raw,
         fromfile=parsed_args.file,
     )
 
