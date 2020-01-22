@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field, InitVar
 from typing import List
 from collections import deque
+import click
 
 _CMDS = {}
 
@@ -188,69 +189,69 @@ class BFInterpreter:
             print("Current cell is 0. Not jumping.")
 
 
-# TODO option for separate memories for each source file inputted
-if __name__ == "__main__":
-    from argparse import ArgumentParser
-
-    parser = ArgumentParser(description="A simple brainfuck interpreter.")
-
-    parser.add_argument(
-        "file", help="brainfuck source file(s) to execute", nargs="*"
-    )
-    parser.add_argument(
-        "--step-by-step",
-        "-s",
-        action="store_true",
-        help="Execute each instruction one by one, waiting for user confirmation to continue to the next",
-    )
-    parser.add_argument(
-        "--print-window",
-        "-pw",
-        default=10,
-        type=int,
-        help="size of the window of memory cells that will be printed. default 10",
-    )
-    parser.add_argument(
-        "--head-margin",
-        "-hm",
-        default=2,
-        type=int,
-        help="minimum number of cells away the head needs to be to shift the print window",
-    )
-    parser.add_argument(
-        "--show-memory",
-        "-sm",
-        action="store_true",
-        help="print contents of memory near the head at each execution step",
-    )
-    parser.add_argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="print description of each instruction executed",
-    )
-    parser.add_argument(
-        "--print-raw",
-        "-r",
-        action="store_true",
-        help="print character representation of cells",
-    )
-
-    parsed_args = parser.parse_args()
-
+@click.command()
+@click.argument("files", nargs=-1, required=False)
+@click.option(
+    "--step-by-step",
+    "-s",
+    is_flag=True,
+    help="Execute each instruction one by one, waiting for user confirmation to continue to the next",
+)
+@click.option(
+    "--print-window",
+    "-pw",
+    type=int,
+    default=10,
+    help="Size of the window of memory cells that will be printed",
+)
+@click.option(
+    "--head-margin",
+    "-hm",
+    type=int,
+    default=2,
+    help="Minimum number of cells away the head needs to be to shift the print window",
+)
+@click.option(
+    "--show-memory",
+    "-sm",
+    is_flag=True,
+    help="Print contents of memory near the head at each execution step",
+)
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    help="Print description of each instruction executed",
+)
+@click.option(
+    "--print-raw",
+    "-r",
+    is_flag=True,
+    help="Print character representation of cells",
+)
+def main(
+    files,
+    step_by_step,
+    print_window,
+    head_margin,
+    show_memory,
+    verbose,
+    print_raw,
+):
+    """A simple brainfuck interpreter."""
     bf_int = BFInterpreter(
-        stepbystep=parsed_args.step_by_step,
-        showmem=parsed_args.show_memory,
-        window_size=parsed_args.print_window,
-        margin=parsed_args.head_margin,
-        verbose=parsed_args.verbose,
-        printraw=parsed_args.print_raw,
-        fromfile=parsed_args.file,
+        stepbystep=step_by_step,
+        showmem=show_memory,
+        window_size=print_window,
+        margin=head_margin,
+        verbose=verbose,
+        printraw=print_raw,
+        fromfile=len(files),
     )
 
-    if parsed_args.file:
+    if files:
         try:
-            for filename in parsed_args.file:
+            for filename in files:
                 with open(filename, "r") as file:
                     bf_int.evaluate(file.read())
         except (FileNotFoundError, EOFError, KeyboardInterrupt) as e:
@@ -263,3 +264,12 @@ if __name__ == "__main__":
         except (EOFError, KeyboardInterrupt):
             print("Goodbye")
             exit(0)
+
+
+# TODO option for separate memories for each source file inputted
+# TODO Interpreter holds list of objects that carry out optional cmdline args
+# TODO put driver into main function
+# TODO handle jumps on the fly with stack, remove need for preprocessing
+# TODO add option to dump stdout output after program execution
+if __name__ == "__main__":
+    main()
