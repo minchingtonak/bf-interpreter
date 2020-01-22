@@ -254,8 +254,8 @@ def main(
             for filename in files:
                 with open(filename, "r") as file:
                     bf_int.evaluate(file.read())
-        except (FileNotFoundError, EOFError, KeyboardInterrupt) as e:
-            print(e)
+        except (FileNotFoundError, EOFError, KeyboardInterrupt) as error:
+            print(error)
     else:
         try:
             while True:
