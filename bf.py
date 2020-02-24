@@ -32,6 +32,7 @@ class BFInterpreter:
     margin: int
     verbose: bool
     printraw: bool
+    printsteps: bool
     fromfile: bool
 
     # Interpreter parameters
@@ -63,7 +64,8 @@ class BFInterpreter:
                     input("Enter to continue to next step...")
             except KeyError:
                 pass
-        print(f"\nCompleted in {steps} steps.")
+        if self.printsteps:
+            print(f"\nCompleted in {steps} steps.")
 
     def preprocess(self, code):
         """Preprocess brainfuck source.
@@ -271,6 +273,12 @@ class BFInterpreter:
     is_flag=True,
     help="Print character representation of cells",
 )
+@click.option(
+    "--print-steps",
+    "-t",
+    is_flag=True,
+    help="After execution, print total number of steps taken",
+)
 def main(
         files,
         step_by_step,
@@ -279,26 +287,29 @@ def main(
         show_memory,
         verbose,
         print_raw,
+        print_steps
 ):
     """CLI for the interpreter."""
-    bf_int = BFInterpreter(
-        stepbystep=step_by_step,
-        showmem=show_memory,
-        window_size=print_window,
-        margin=head_margin,
-        verbose=verbose,
-        printraw=print_raw,
-        fromfile=len(files),
-    )
+    params = {
+        "stepbystep": step_by_step,
+        "showmem": show_memory,
+        "window_size": print_window,
+        "margin": head_margin,
+        "verbose": verbose,
+        "printraw": print_raw,
+        "printsteps": print_steps,
+        "fromfile": len(files)
+    }
 
     if files:
         try:
             for filename in files:
                 with open(filename, "r") as file:
-                    bf_int.evaluate(file.read())
+                    BFInterpreter(params).evaluate(file.read())
         except (FileNotFoundError, EOFError, KeyboardInterrupt) as error:
             print(error)
     else:
+        bf_int = BFInterpreter(params)
         try:
             while True:
                 source = input("bf> ")
@@ -308,9 +319,6 @@ def main(
             sysexit(0)
 
 
-# TODO option for separate memories for each source file inputted
-# TODO Interpreter holds list of objects that carry out optional cmdline args
-# TODO put driver into main function
 # TODO handle jumps on the fly with stack, remove need for preprocessing
 # TODO add option to dump stdout output after program execution
 if __name__ == "__main__":
